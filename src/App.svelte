@@ -422,7 +422,7 @@
   });
 </script>
 
-<div class="note-viewer">
+<div class="note-viewer" data-note-target={targetInput}>
   {#if showManualEntry}
     <main class="manual-entry">
       <form class="manual-panel" onsubmit={(submitEvent) => { submitEvent.preventDefault(); loadTarget(); }}>
