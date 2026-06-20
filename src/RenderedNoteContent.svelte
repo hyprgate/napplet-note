@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Thin adapter over the shared @hyprgate/ui note renderer — supplies the
+  // Thin adapter over the shared @hyprgate/napplet-ui note renderer — supplies the
   // note-viewer's callback-based navigation (root note and thread replies).
-  import NoteContent from '@hyprgate/ui/NoteContent.svelte';
+  import NoteContent from '@hyprgate/napplet-ui/NoteContent.svelte';
 
   interface Props {
     content: string;
