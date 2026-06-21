@@ -5,6 +5,7 @@ import {
   KIND_REPOST,
   KIND_TEXT_NOTE,
   KIND_ZAP_RECEIPT,
+  customEmojiForShortcodeContent,
   parseZapReceipt,
   rootAddressForZapTarget,
   summarizeZapReceipts,
@@ -85,14 +86,11 @@ function groupReactions(events: Iterable<NostrEvent>): ReactionGroup[] {
 }
 
 function customEmojiForReaction(content: string, events: NostrEvent[]): Pick<ReactionGroup, 'imageUrl' | 'shortcode'> {
-  const shortcode = /^:([A-Za-z0-9_-]+):$/.exec(content)?.[1];
-  if (!shortcode) return {};
-  const emojiTag = events
-    .flatMap((event) => event.tags)
-    .find((tag) => tag[0] === 'emoji' && tag[1] === shortcode && typeof tag[2] === 'string');
+  const emoji = customEmojiForShortcodeContent(content, events.flatMap((event) => event.tags));
+  if (!emoji) return {};
   return {
-    shortcode,
-    ...(emojiTag?.[2] ? { imageUrl: emojiTag[2] } : {}),
+    shortcode: emoji.shortcode,
+    ...(emoji.imageUrl ? { imageUrl: emoji.imageUrl } : {}),
   };
 }
 

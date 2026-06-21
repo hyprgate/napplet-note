@@ -494,6 +494,7 @@
             <section class="note-content" aria-label="Note content">
               <RenderedNoteContent
                 content={event.content || '[empty content]'}
+                emojiTags={event.tags}
                 profileLabel={displayNameFor}
                 {openProfile}
                 {openNoteReference}
@@ -590,6 +591,7 @@
                         <div class="reply-content">
                           <RenderedNoteContent
                             content={item.node.event.content || '[empty content]'}
+                            emojiTags={item.node.event.tags}
                             profileLabel={displayNameFor}
                             {openProfile}
                             {openNoteReference}

@@ -5,16 +5,18 @@
 
   interface Props {
     content: string;
+    emojiTags?: string[][];
     profileLabel: (pubkey: string) => string;
     openProfile: (pubkey: string) => void;
     openNoteReference: (reference: string) => void;
   }
 
-  let { content, profileLabel, openProfile, openNoteReference }: Props = $props();
+  let { content, emojiTags = [], profileLabel, openProfile, openNoteReference }: Props = $props();
 </script>
 
 <NoteContent
   {content}
+  {emojiTags}
   {profileLabel}
   onProfileClick={openProfile}
   onReferenceClick={openNoteReference}
