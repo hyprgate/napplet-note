@@ -427,7 +427,7 @@
     <main class="manual-entry">
       <form class="manual-panel" onsubmit={(submitEvent) => { submitEvent.preventDefault(); loadTarget(); }}>
         <div class="manual-heading">
-          <span class="manual-kicker">Note Viewer</span>
+          <span class="manual-kicker">Note Reader</span>
           <h1>Open a Nostr note</h1>
         </div>
         <label class="target-control">
