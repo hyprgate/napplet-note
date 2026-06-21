@@ -3,6 +3,7 @@ import {
   KIND_NIP22_COMMENT,
   KIND_REACTION,
   KIND_TEXT_NOTE,
+  customEmojiForShortcodeContent,
   parseZapReceipt,
 } from '@hyprgate/utils';
 import type { EngagementCounts, ReactionGroup } from '@hyprgate/utils';
@@ -36,10 +37,8 @@ export function normalizeReactionContent(content: string): string {
 }
 
 function customEmoji(content: string, tags: string[][]): Pick<ReactionGroup, 'imageUrl' | 'shortcode'> {
-  const shortcode = /^:([A-Za-z0-9_-]+):$/.exec(content)?.[1];
-  if (!shortcode) return {};
-  const emojiTag = tags.find((tag) => tag[0] === 'emoji' && tag[1] === shortcode && typeof tag[2] === 'string');
-  return { shortcode, ...(emojiTag?.[2] ? { imageUrl: emojiTag[2] } : {}) };
+  const emoji = customEmojiForShortcodeContent(content, tags);
+  return emoji ? { shortcode: emoji.shortcode, ...(emoji.imageUrl ? { imageUrl: emoji.imageUrl } : {}) } : {};
 }
 
 type EngagementCategory = 'reactions' | 'comments' | 'zaps';

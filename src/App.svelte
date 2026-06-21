@@ -422,12 +422,12 @@
   });
 </script>
 
-<div class="note-viewer">
+<div class="note-viewer" data-note-target={targetInput}>
   {#if showManualEntry}
     <main class="manual-entry">
       <form class="manual-panel" onsubmit={(submitEvent) => { submitEvent.preventDefault(); loadTarget(); }}>
         <div class="manual-heading">
-          <span class="manual-kicker">Note Viewer</span>
+          <span class="manual-kicker">Note Reader</span>
           <h1>Open a Nostr note</h1>
         </div>
         <label class="target-control">
@@ -494,6 +494,7 @@
             <section class="note-content" aria-label="Note content">
               <RenderedNoteContent
                 content={event.content || '[empty content]'}
+                emojiTags={event.tags}
                 profileLabel={displayNameFor}
                 {openProfile}
                 {openNoteReference}
@@ -590,6 +591,7 @@
                         <div class="reply-content">
                           <RenderedNoteContent
                             content={item.node.event.content || '[empty content]'}
+                            emojiTags={item.node.event.tags}
                             profileLabel={displayNameFor}
                             {openProfile}
                             {openNoteReference}
