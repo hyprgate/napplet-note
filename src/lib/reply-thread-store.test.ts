@@ -41,6 +41,64 @@ describe('reply thread store', () => {
     );
   });
 
+  it('subscribes to parent and root context for opened kind 1 replies', () => {
+    const opened = makeEvent({
+      id: 'opened',
+      kind: KIND_TEXT_NOTE,
+      tags: [
+        ['e', 'root-id', '', 'root'],
+        ['e', 'parent-id', '', 'reply'],
+      ],
+    });
+
+    expect(__test__.contextFilters(opened)).toEqual([
+      { ids: ['parent-id', 'root-id'], limit: 2 },
+    ]);
+  });
+
+  it('subscribes to address roots for opened NIP-22 comments', () => {
+    const opened = makeEvent({
+      id: 'opened-comment',
+      kind: KIND_NIP22_COMMENT,
+      tags: [
+        ['A', '30023:article-author:post'],
+        ['K', '30023'],
+        ['P', 'article-author'],
+        ['e', 'parent-comment'],
+        ['k', String(KIND_NIP22_COMMENT)],
+      ],
+    });
+
+    expect(__test__.contextFilters(opened)).toEqual([
+      { ids: ['parent-comment'], limit: 1 },
+      { kinds: [30023], authors: ['article-author'], '#d': ['post'], limit: 1 },
+    ]);
+  });
+
+  it('builds visible upward context from root to immediate parent', () => {
+    const opened = makeEvent({
+      id: 'opened',
+      kind: KIND_TEXT_NOTE,
+      tags: [
+        ['e', 'root', '', 'root'],
+        ['e', 'parent', '', 'reply'],
+      ],
+    });
+    const rootEvent = makeEvent({ id: 'root', created_at: 1 });
+    const parent = makeEvent({
+      id: 'parent',
+      created_at: 2,
+      tags: [
+        ['e', 'root', '', 'root'],
+        ['e', 'root', '', 'reply'],
+      ],
+    });
+
+    expect(__test__.buildContext(opened, [parent, rootEvent], false).visibleAncestors.map((event) => event.id)).toEqual(['parent']);
+    expect(__test__.buildContext(opened, [parent, rootEvent], true).visibleAncestors.map((event) => event.id)).toEqual(['root', 'parent']);
+    expect(__test__.buildContext(opened, [parent, rootEvent], true).rootEvent?.id).toBe('root');
+  });
+
   it('subscribes to address-tagged NIP-22 comments for addressable roots', () => {
     const articleRoot = makeEvent({
       id: 'article-id',

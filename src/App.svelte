@@ -100,6 +100,8 @@
   const totalZapMillisats = $derived(zapTotalMillisats(interactions.zaps));
   const totalZapSatsLabel = $derived(formatMillisatsAsSats(totalZapMillisats));
   const shareReference = $derived(createNoteViewerShareReference(event, target));
+  const contextHiddenCount = $derived(Math.max(0, thread.ancestors.length - thread.visibleAncestors.length));
+  const contextRootEvent = $derived(thread.rootEvent ?? thread.ancestors[0] ?? null);
   const showManualEntry = $derived(manualEntryVisible && !event);
   const createdRelative = $derived(event ? timeago(event.created_at * 1000) : '');
   const clientName = $derived(event ? clientTagValue(event) : null);
@@ -216,6 +218,11 @@
     store.load(reference);
   }
 
+  function openRootContext(): void {
+    if (!contextRootEvent) return;
+    openNoteReference(contextRootEvent.id);
+  }
+
   function optionalString(value: unknown): string | undefined {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
   }
@@ -260,6 +267,10 @@
     if (event?.pubkey) pubkeys.add(event.pubkey);
     if (event?.content) collectProfileReferences(event.content, pubkeys);
 
+    for (const ancestor of thread.visibleAncestors) {
+      if (ancestor.pubkey) pubkeys.add(ancestor.pubkey);
+      collectProfileReferences(ancestor.content, pubkeys);
+    }
     for (const item of thread.visible) {
       if (item.node.event.pubkey) pubkeys.add(item.node.event.pubkey);
       collectProfileReferences(item.node.event.content, pubkeys);
@@ -366,6 +377,7 @@
   $effect(() => {
     const ids: string[] = [];
     if (event) ids.push(event.id);
+    for (const ancestor of thread.visibleAncestors) ids.push(ancestor.id);
     for (const item of thread.visible) ids.push(item.node.event.id);
     threadEngagementStore.setTargets(ids);
   });
@@ -456,6 +468,71 @@
       {#if event}
         <article class="detail-layout">
           <section class="note-article">
+            {#if thread.visibleAncestors.length > 0 || thread.contextLoading || thread.contextError}
+              <section class="thread-context-rail" aria-label="Thread context">
+                <div class="thread-context-header">
+                  <span>{thread.visibleAncestors.length > 0 ? 'In reply to' : 'Thread context'}</span>
+                  <div class="thread-context-actions">
+                    {#if contextRootEvent && contextRootEvent.id !== event.id}
+                      <button class="small-action" type="button" onclick={openRootContext}>Jump root</button>
+                    {/if}
+                    {#if thread.ancestors.length > 1}
+                      <button class="small-action" type="button" onclick={() => threadStore.toggleContextExpanded()}>
+                        {thread.contextExpanded ? 'Collapse context' : `Show ${contextHiddenCount} earlier`}
+                      </button>
+                    {/if}
+                  </div>
+                </div>
+
+                {#if thread.contextLoading}
+                  <p class="status-text">loading context...</p>
+                {/if}
+                {#if thread.contextError}
+                  <p class="status-text danger">{thread.contextError}</p>
+                {/if}
+
+                <div class="thread-context-list">
+                  {#each thread.visibleAncestors as ancestor (ancestor.id)}
+                    <article class="thread-context-node">
+                      <div class="thread-meta">
+                        <div class="thread-meta-main">
+                          <button type="button" class="profile-chip" title={ancestor.pubkey} onclick={() => openProfile(ancestor.pubkey)}>
+                            <span class="profile-chip-avatar">
+                              {#if avatarUrlFor(ancestor.pubkey)}
+                                <img use:resourceImage={avatarUrlFor(ancestor.pubkey)} alt="" loading="lazy" />
+                              {:else}
+                                <span>{avatarFallbackFor(ancestor.pubkey)}</span>
+                              {/if}
+                            </span>
+                            <span class="profile-chip-name" style={pubkeyColorStyle(ancestor.pubkey)}>{displayNameFor(ancestor.pubkey)}</span>
+                          </button>
+                          <span>{formatTimestamp(ancestor.created_at)}</span>
+                        </div>
+                        <button class="small-action" type="button" onclick={() => openNoteReference(ancestor.id)}>Open</button>
+                      </div>
+
+                      <div class="reply-content">
+                        <RenderedNoteContent
+                          content={ancestor.content || '[empty content]'}
+                          emojiTags={ancestor.tags}
+                          profileLabel={displayNameFor}
+                          {openProfile}
+                          {openNoteReference}
+                        />
+                      </div>
+
+                      <ThreadNodeEngagement
+                        event={{ id: ancestor.id, kind: ancestor.kind, pubkey: ancestor.pubkey }}
+                        counts={nodeCounts(ancestor.id)}
+                        {reactionOptions}
+                        collapsible
+                      />
+                    </article>
+                  {/each}
+                </div>
+              </section>
+            {/if}
+
             <header class="note-header">
               <div class="author-block">
                 <button type="button" class="author-avatar" onclick={() => openProfile(event.pubkey)} aria-label="Open profile for {authorName}">
@@ -1328,6 +1405,7 @@
 
   .interaction-list,
   .quote-list,
+  .thread-context-list,
   .thread-list {
     display: grid;
     gap: 0;
@@ -1371,6 +1449,7 @@
   }
 
   .quote-row,
+  .thread-context-node,
   .thread-node {
     display: grid;
     gap: 8px;
@@ -1380,6 +1459,7 @@
 
   .interaction-row:last-child,
   .quote-row:last-child,
+  .thread-context-node:last-child,
   .thread-node:last-child {
     border-bottom: 0;
   }
@@ -1392,6 +1472,29 @@
     font-size: 12px;
     line-height: 1.6;
     white-space: pre-wrap;
+  }
+
+  .thread-context-rail {
+    display: grid;
+    gap: 6px;
+    border-bottom: 1px solid var(--border-dim);
+    padding: 0 0 10px;
+  }
+
+  .thread-context-header,
+  .thread-context-actions {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+  }
+
+  .thread-context-header {
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
   }
 
   .quote-row time,
