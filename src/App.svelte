@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import type { NostrEvent } from '@hyprgate/types';
-  import { inc as ipc, identity, relay, type Subscription } from '@napplet/sdk';
+  import { inc as ipc, identity, relay, link, type Subscription } from '@napplet/sdk';
   import {
     KIND_METADATA,
     NOTE_VIEWER_OPEN_TOPIC,
@@ -13,6 +13,7 @@
     parseNoteContent,
     pubkeyColorStyle,
     resourceImage,
+    shouldInterceptLinkClick,
     waitForPublicKey,
   } from '@hyprgate/utils';
   import { format as timeago } from 'timeago.js';
@@ -157,6 +158,17 @@
       copyState = 'idle';
       copyResetTimer = null;
     }, 1400);
+  }
+
+  // NAP-LINK: open the public njump share link via the shell-owned opener so the
+  // new browsing context does not inherit this napplet's origin.
+  async function openShareLink(event: MouseEvent, href: string): Promise<void> {
+    if (!shouldInterceptLinkClick(event)) return;
+    event.preventDefault();
+    const result = await link.open(href);
+    if (result.status !== 'opened') {
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
   }
 
   function handleKeydown(event: KeyboardEvent): void {
@@ -563,7 +575,7 @@
                   <button class="action-button primary" type="button" onclick={() => void copyShareReference()}>
                     {copyState === 'copied' ? 'copied' : copyState === 'failed' ? 'failed' : shareReference.type}
                   </button>
-                  <a class="action-button" href={shareReference.url} target="_blank" rel="noreferrer">open</a>
+                  <a class="action-button" href={shareReference.url} target="_blank" rel="noreferrer" onclick={(e) => void openShareLink(e, shareReference.url)}>open</a>
                 </div>
               {/if}
             </header>
