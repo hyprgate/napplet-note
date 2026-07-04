@@ -92,7 +92,7 @@ describe('createNoteViewerStore', () => {
   it('loads a target through relay.subscribe and closes after the event arrives', () => {
     const close = vi.fn();
     mockSubscribe.mockImplementationOnce((_filters, onEvent) => {
-      onEvent(event);
+      onEvent({ event });
       return { close };
     });
 

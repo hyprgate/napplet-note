@@ -256,7 +256,8 @@ function requestContext(ctx: ReplyThreadContext): void {
 
   ctx.ancestorSub = relay.subscribe(
     filters,
-    (event: NostrEvent) => {
+    (result) => {
+      const event = result.event as NostrEvent;
       if (!ctx.ancestorEvents.has(event.id)) {
         ctx.ancestorEvents.set(event.id, event);
         rebuildContext(ctx);
@@ -302,7 +303,8 @@ function load(ctx: ReplyThreadContext, root: NostrEvent): void {
 
   ctx.sub = relay.subscribe(
     threadFilters(root),
-    (event: NostrEvent) => {
+    (result) => {
+      const event = result.event as NostrEvent;
       if (!ctx.events.has(event.id)) {
         ctx.events.set(event.id, event);
         rebuild(ctx);

@@ -166,7 +166,8 @@ function load(ctx: InteractionDetailContext, root: NostrEvent): void {
 
   ctx.sub = relay.subscribe(
     interactionFilters(root),
-    (event: NostrEvent) => {
+    (result) => {
+      const event = result.event as NostrEvent;
       applyEvent(ctx, root, event);
       ctx.notify();
     },

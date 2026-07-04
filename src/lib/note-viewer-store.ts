@@ -149,7 +149,8 @@ export function createNoteViewerStore(onUpdate?: () => void): NoteViewerStore {
     let closeAfterSubscribeReturns = false;
     activeSub = relay.subscribe(
       filtersForTarget(target),
-      (event: NostrEvent) => {
+      (result) => {
+        const event = result.event as NostrEvent;
         state.event = event;
         state.loading = false;
         state.error = null;

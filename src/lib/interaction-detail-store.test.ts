@@ -80,14 +80,14 @@ describe('interaction detail store', () => {
   it('keeps reactions, zaps, reposts, quote events, and quoted context separate', () => {
     const root = makeEvent({ id: 'root', kind: KIND_TEXT_NOTE, tags: [['q', 'quoted']] });
     mockSubscribe.mockImplementationOnce((_filters, onEvent, onEose) => {
-      onEvent(makeEvent({ id: 'reaction', kind: KIND_REACTION, content: '+', tags: [['e', root.id]] }));
-      onEvent(makeEvent({ id: 'reaction', kind: KIND_REACTION, content: '+', tags: [['e', root.id]] }));
-      onEvent(makeZapReceipt({ id: 'zap-a', targetId: root.id, amountMillisats: 21000, senderPubkey: 'zapper-a' }));
-      onEvent(makeZapReceipt({ id: 'zap-a', targetId: root.id, amountMillisats: 21000, senderPubkey: 'zapper-a' }));
-      onEvent(makeZapReceipt({ id: 'zap-b', targetId: root.id, amountMillisats: 4000, senderPubkey: 'zapper-b' }));
-      onEvent(makeEvent({ id: 'repost', kind: KIND_REPOST, tags: [['e', root.id]] }));
-      onEvent(makeEvent({ id: 'quote-event', kind: KIND_TEXT_NOTE, tags: [['q', root.id]] }));
-      onEvent(makeEvent({ id: 'quoted', kind: KIND_TEXT_NOTE, content: 'quoted note' }));
+      onEvent({ event: makeEvent({ id: 'reaction', kind: KIND_REACTION, content: '+', tags: [['e', root.id]] }) });
+      onEvent({ event: makeEvent({ id: 'reaction', kind: KIND_REACTION, content: '+', tags: [['e', root.id]] }) });
+      onEvent({ event: makeZapReceipt({ id: 'zap-a', targetId: root.id, amountMillisats: 21000, senderPubkey: 'zapper-a' }) });
+      onEvent({ event: makeZapReceipt({ id: 'zap-a', targetId: root.id, amountMillisats: 21000, senderPubkey: 'zapper-a' }) });
+      onEvent({ event: makeZapReceipt({ id: 'zap-b', targetId: root.id, amountMillisats: 4000, senderPubkey: 'zapper-b' }) });
+      onEvent({ event: makeEvent({ id: 'repost', kind: KIND_REPOST, tags: [['e', root.id]] }) });
+      onEvent({ event: makeEvent({ id: 'quote-event', kind: KIND_TEXT_NOTE, tags: [['q', root.id]] }) });
+      onEvent({ event: makeEvent({ id: 'quoted', kind: KIND_TEXT_NOTE, content: 'quoted note' }) });
       onEose?.();
       return { close: vi.fn() };
     });

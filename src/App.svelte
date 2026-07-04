@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import type { NostrEvent } from '@hyprgate/types';
-  import { inc as ipc, identity, relay, link, type Subscription } from '@napplet/sdk';
+  import { inc as ipc, identity, link, type Subscription } from '@napplet/sdk';
   import {
-    KIND_METADATA,
     NOTE_VIEWER_OPEN_TOPIC,
     NOTE_VIEWER_READY_TOPIC,
     clientTagValue,
@@ -24,6 +23,7 @@
   import { createThreadEngagementStore } from './lib/thread-engagement-store.js';
   import { createEmojiSetStore, type EmojiOption } from './lib/emoji-sets.js';
   import { publishNoteViewerReaction } from './lib/note-viewer-actions.js';
+  import { subscribeProfileMetadata, type ProfileContent } from './lib/profile-metadata.js';
   import RenderedNoteContent from './RenderedNoteContent.svelte';
   import ThreadNodeEngagement from './components/ThreadNodeEngagement.svelte';
   import {
@@ -40,15 +40,6 @@
   } from './lib/note-viewer-display.js';
 
   type ActivityTab = 'replies' | 'zaps' | 'reposts' | 'reactions' | 'quotes';
-
-  interface ProfileContent {
-    name?: string;
-    display_name?: string;
-    displayName?: string;
-    picture?: string;
-    image?: string;
-    _created_at?: number;
-  }
 
   const store = createNoteViewerStore(syncFromStore);
   const interactionStore = createInteractionDetailStore(syncInteractionsFromStore);
@@ -235,28 +226,6 @@
     openNoteReference(contextRootEvent.id);
   }
 
-  function optionalString(value: unknown): string | undefined {
-    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-  }
-
-  function parseProfileEvent(profileEvent: NostrEvent): ProfileContent | null {
-    if (profileEvent.kind !== KIND_METADATA) return null;
-
-    try {
-      const metadata = JSON.parse(profileEvent.content) as Record<string, unknown>;
-      return {
-        name: optionalString(metadata.name),
-        display_name: optionalString(metadata.display_name),
-        displayName: optionalString(metadata.displayName),
-        picture: optionalString(metadata.picture),
-        image: optionalString(metadata.image),
-        _created_at: profileEvent.created_at,
-      };
-    } catch {
-      return null;
-    }
-  }
-
   function profileFor(pubkey: string): ProfileContent | null {
     profileMapVersion;
     return profileMap.get(pubkey) ?? null;
@@ -325,35 +294,27 @@
     if (profileMap.has(pubkey) || loadingProfilePubkeys.has(pubkey)) return;
     loadingProfilePubkeys.add(pubkey);
 
-    let closeAfterSubscribeReturns = false;
-    let subscription: Subscription | null = null;
-    const closeSubscription = (): void => {
-      loadingProfilePubkeys.delete(pubkey);
-      if (subscription) {
-        profileSubscriptions.delete(subscription);
-        subscription.close();
-        subscription = null;
-      } else {
-        closeAfterSubscribeReturns = true;
-      }
-    };
-
-    subscription = relay.subscribe(
-      [{ kinds: [KIND_METADATA], authors: [pubkey], limit: 1 }],
-      (profileEvent) => {
-        if (profileEvent.pubkey !== pubkey) return;
-        const nextProfile = parseProfileEvent(profileEvent as NostrEvent);
-        if (!nextProfile) return;
-        const currentProfile = profileMap.get(pubkey);
-        if (currentProfile?._created_at !== undefined && currentProfile._created_at > profileEvent.created_at) return;
-        profileMap.set(pubkey, nextProfile);
+    const subscription = subscribeProfileMetadata(
+      [pubkey],
+      (profilePubkey, nextProfile) => {
+        const currentProfile = profileMap.get(profilePubkey);
+        if (
+          currentProfile?._created_at !== undefined
+          && nextProfile._created_at !== undefined
+          && currentProfile._created_at > nextProfile._created_at
+        ) {
+          return;
+        }
+        profileMap.set(profilePubkey, nextProfile);
         profileMapVersion++;
       },
-      closeSubscription,
+      () => {
+        loadingProfilePubkeys.delete(pubkey);
+        profileSubscriptions.delete(subscription);
+      },
     );
 
-    if (subscription) profileSubscriptions.add(subscription);
-    if (closeAfterSubscribeReturns) closeSubscription();
+    profileSubscriptions.add(subscription);
   }
 
   function ensureProfiles(pubkeys: string[]): void {

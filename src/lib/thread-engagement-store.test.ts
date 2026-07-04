@@ -12,12 +12,12 @@ function makeEvent(overrides: Partial<NostrEvent>): NostrEvent {
 }
 
 describe('thread engagement store', () => {
-  let onEvent: ((event: NostrEvent) => void) | null = null;
+  let onEvent: ((result: { event: NostrEvent }) => void) | null = null;
   beforeEach(() => {
     vi.clearAllMocks();
     onEvent = null;
     vi.mocked(relay.subscribe).mockImplementation((_filters, cb) => {
-      onEvent = cb as (event: NostrEvent) => void;
+      onEvent = cb as (result: { event: NostrEvent }) => void;
       return { close: vi.fn() };
     });
   });
@@ -33,10 +33,10 @@ describe('thread engagement store', () => {
     const store = createThreadEngagementStore();
     store.setTargets(['root', 'reply1']);
 
-    onEvent!(makeEvent({ id: 'r1', kind: 7, content: '🔥', tags: [['e', 'root']] }));
-    onEvent!(makeEvent({ id: 'r2', kind: 7, content: '🔥', tags: [['e', 'root']] }));
-    onEvent!(makeEvent({ id: 'r3', kind: 7, content: '+', tags: [['e', 'reply1']] }));
-    onEvent!(makeEvent({ id: 'c1', kind: 1, content: 'nice', tags: [['e', 'root']] }));
+    onEvent!({ event: makeEvent({ id: 'r1', kind: 7, content: '🔥', tags: [['e', 'root']] }) });
+    onEvent!({ event: makeEvent({ id: 'r2', kind: 7, content: '🔥', tags: [['e', 'root']] }) });
+    onEvent!({ event: makeEvent({ id: 'r3', kind: 7, content: '+', tags: [['e', 'reply1']] }) });
+    onEvent!({ event: makeEvent({ id: 'c1', kind: 1, content: 'nice', tags: [['e', 'root']] }) });
 
     const root = store.countsFor('root');
     expect(root.reactions).toBe(2);
@@ -52,9 +52,9 @@ describe('thread engagement store', () => {
     const store = createThreadEngagementStore();
     store.setTargets(['root']);
     const dup = makeEvent({ id: 'dup', kind: 7, content: '+', tags: [['e', 'root']] });
-    onEvent!(dup);
-    onEvent!(dup);
-    onEvent!(makeEvent({ id: 'other', kind: 7, content: '+', tags: [['e', 'unrelated']] }));
+    onEvent!({ event: dup });
+    onEvent!({ event: dup });
+    onEvent!({ event: makeEvent({ id: 'other', kind: 7, content: '+', tags: [['e', 'unrelated']] }) });
 
     expect(store.countsFor('root').reactions).toBe(1);
     expect(store.countsFor('unrelated').reactions).toBe(0);
@@ -63,12 +63,12 @@ describe('thread engagement store', () => {
   it('captures custom emoji image url from reaction tags', () => {
     const store = createThreadEngagementStore();
     store.setTargets(['root']);
-    onEvent!(makeEvent({
+    onEvent!({ event: makeEvent({
       id: 'ce',
       kind: 7,
       content: ':blobcat:',
       tags: [['e', 'root'], ['emoji', 'blobcat', 'https://emoji.example/blobcat.png']],
-    }));
+    }) });
     expect(store.countsFor('root').reactionGroups[0]).toEqual({
       content: ':blobcat:',
       count: 1,

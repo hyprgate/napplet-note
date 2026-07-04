@@ -150,7 +150,7 @@ function setTargets(ctx: ThreadEngagementContext, ids: string[]): void {
 
   ctx.sub = relay.subscribe(
     ENGAGEMENT_FILTERS(unique),
-    (event: NostrEvent) => applyEvent(ctx, event),
+    (result) => applyEvent(ctx, result.event as NostrEvent),
     () => {},
   );
 }
