@@ -14,9 +14,9 @@
     "test:conformance": "pnpm conformance"
   },
   "dependencies": {
-    "@hyprgate/napplet-ui": "0.0.1",
-    "@hyprgate/types": "0.0.1",
-    "@hyprgate/utils": "0.0.1",
+    "@hyprgate/napplet-ui": "workspace:*",
+    "@hyprgate/types": "workspace:*",
+    "@hyprgate/utils": "workspace:*",
     "@napplet/sdk": "0.23.0",
     "@napplet/shim": "0.26.1",
     "nostr-tools": "2.23.3",
@@ -29,6 +29,7 @@
     "@napplet/conformance-cli": "^0.2.13",
     "@napplet/vite-plugin": "0.10.1",
     "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "@types/node": "25.5.0",
     "@unocss/reset": "^66.6.7",
     "@unocss/vite": "^66.6.7",
     "jsdom": "^26.1.0",
