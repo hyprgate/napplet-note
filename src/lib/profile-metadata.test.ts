@@ -9,6 +9,7 @@ vi.mock('@napplet/sdk', () => ({
   },
   outbox: {
     subscribe: vi.fn(),
+    query: vi.fn(),
   },
 }));
 
@@ -64,6 +65,7 @@ describe('note viewer profile metadata', () => {
     vi.mocked(outbox.subscribe).mockReturnValue(
       makeOutboxSub() as unknown as ReturnType<typeof outbox.subscribe>,
     );
+    vi.mocked(outbox.query).mockResolvedValue({ events: [] });
     installShell();
   });
 
@@ -73,10 +75,17 @@ describe('note viewer profile metadata', () => {
 
   it('uses the outbox kind-0 rail when shell supports NAP-OUTBOX', async () => {
     const sub = makeOutboxSub();
-    vi.mocked(outbox.subscribe).mockImplementation((filters, options) => {
+    vi.mocked(outbox.query).mockImplementation(async (filters, options) => {
       expect(filters).toEqual([{ kinds: [0], authors: ['pk1'], limit: 1 }]);
-      expect(options).toEqual({ strategy: 'outbox', live: false });
-      return sub as unknown as ReturnType<typeof outbox.subscribe>;
+      expect(options).toBeUndefined();
+      return {
+        events: [{
+          event: makeProfileEvent('pk1', 100, {
+            display_name: 'YakiHonne',
+            picture: 'https://example.test/yaki.png',
+          }),
+        }],
+      };
     });
     const received: Array<[string, string | undefined]> = [];
     const done = vi.fn();
@@ -87,17 +96,12 @@ describe('note viewer profile metadata', () => {
     await flush();
 
     expect(relay.subscribe).not.toHaveBeenCalled();
-    sub.emit('event', { event: makeProfileEvent('pk1', 100, {
-      display_name: 'YakiHonne',
-      picture: 'https://example.test/yaki.png',
-    }) });
-    sub.emit('closed');
 
     expect(received).toEqual([['pk1', 'YakiHonne']]);
     expect(done).toHaveBeenCalledOnce();
 
     handle.close();
-    expect(sub.close).toHaveBeenCalledOnce();
+    expect(sub.close).not.toHaveBeenCalled();
   });
 
   it('falls back to relay.subscribe only when outbox is unavailable', async () => {
@@ -115,25 +119,26 @@ describe('note viewer profile metadata', () => {
     });
     await flush();
 
-    expect(outbox.subscribe).not.toHaveBeenCalled();
+    expect(outbox.query).not.toHaveBeenCalled();
     onEvent?.({ event: makeProfileEvent('pk1', 100, { name: 'Fallback Name' }) });
 
     expect(received).toEqual([['pk1', 'Fallback Name']]);
   });
 
   it('keeps the newest profile and ignores malformed kind-0 content', async () => {
-    const sub = makeOutboxSub();
-    vi.mocked(outbox.subscribe).mockReturnValue(sub as unknown as ReturnType<typeof outbox.subscribe>);
+    vi.mocked(outbox.query).mockResolvedValue({
+      events: [
+        { event: makeProfileEvent('pk1', 200, { name: 'new' }) },
+        { event: makeProfileEvent('pk1', 100, { name: 'old' }) },
+        { event: makeProfileEvent('pk1', 300, '{malformed') },
+      ],
+    });
     const received: string[] = [];
 
     subscribeProfileMetadata(['pk1'], (_pubkey, profile) => {
       if (profile.name) received.push(profile.name);
     });
     await flush();
-
-    sub.emit('event', { event: makeProfileEvent('pk1', 200, { name: 'new' }) });
-    sub.emit('event', { event: makeProfileEvent('pk1', 100, { name: 'old' }) });
-    sub.emit('event', { event: makeProfileEvent('pk1', 300, '{malformed') });
 
     expect(received).toEqual(['new']);
   });
