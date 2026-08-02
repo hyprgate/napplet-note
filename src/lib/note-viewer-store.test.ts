@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { nip19 } from 'nostr-tools';
+import * as nip19 from 'nostr-tools/nip19';
 import type { NostrEvent } from '@hyprgate/types';
 
 vi.mock('@napplet/sdk', () => ({

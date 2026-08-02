@@ -8,7 +8,6 @@
     clientTagValue,
     formatMillisatsAsSats,
     isCanonicalHexPubkey,
-    noteViewerLoadTargetFromPayload,
     parseNoteContent,
     pubkeyColorStyle,
     resourceImage,
@@ -22,6 +21,7 @@
   import { createNoteViewerShareReference } from './lib/note-links.js';
   import { createThreadEngagementStore } from './lib/thread-engagement-store.js';
   import { createEmojiSetStore, type EmojiOption } from './lib/emoji-sets.js';
+  import { noteTargetFromIncEvent, type IncEvent } from './note-intent-delivery.js';
   import { publishNoteViewerReaction } from './lib/note-viewer-actions.js';
   import { subscribeProfileMetadata, type ProfileContent } from './lib/profile-metadata.js';
   import RenderedNoteContent from './RenderedNoteContent.svelte';
@@ -128,8 +128,8 @@
     store.load(targetInput);
   }
 
-  function loadOpenPayload(payload: unknown): void {
-    const nextTarget = noteViewerLoadTargetFromPayload(payload);
+  function loadOpenPayload(event: IncEvent): void {
+    const nextTarget = noteTargetFromIncEvent(event);
     if (!nextTarget) return;
     manualEntryVisible = false;
     targetInput = nextTarget;

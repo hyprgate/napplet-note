@@ -1,5 +1,5 @@
 import type { NostrEvent } from '@hyprgate/types';
-import { nip19 } from 'nostr-tools';
+import * as nip19 from 'nostr-tools/nip19';
 import type { NoteViewerTarget } from './note-viewer-store.js';
 
 /** Base URL of the public njump.to viewer used for shareable note links. */
