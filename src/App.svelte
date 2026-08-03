@@ -471,10 +471,9 @@
                         <div class="thread-meta-main">
                           <button type="button" class="profile-chip" title={ancestor.pubkey} onclick={() => openProfile(ancestor.pubkey)}>
                             <span class="profile-chip-avatar">
+                              <span>{avatarFallbackFor(ancestor.pubkey)}</span>
                               {#if avatarUrlFor(ancestor.pubkey)}
                                 <img use:resourceImage={avatarUrlFor(ancestor.pubkey)} alt="" loading="lazy" />
-                              {:else}
-                                <span>{avatarFallbackFor(ancestor.pubkey)}</span>
                               {/if}
                             </span>
                             <span class="profile-chip-name" style={pubkeyColorStyle(ancestor.pubkey)}>{displayNameFor(ancestor.pubkey)}</span>
@@ -509,10 +508,9 @@
             <header class="note-header">
               <div class="author-block">
                 <button type="button" class="author-avatar" onclick={() => openProfile(event.pubkey)} aria-label="Open profile for {authorName}">
+                  <span>{authorAvatarFallback}</span>
                   {#if authorAvatarUrl}
-                    <img use:resourceImage={authorAvatarUrl} alt={authorName} loading="lazy" />
-                  {:else}
-                    <span>{authorAvatarFallback}</span>
+                    <img use:resourceImage={authorAvatarUrl} alt="" loading="lazy" />
                   {/if}
                 </button>
                 <div class="author-copy">
@@ -625,10 +623,9 @@
                           <div class="thread-meta-main">
                             <button type="button" class="profile-chip" title={item.node.event.pubkey} onclick={() => openProfile(item.node.event.pubkey)}>
                               <span class="profile-chip-avatar">
+                                <span>{avatarFallbackFor(item.node.event.pubkey)}</span>
                                 {#if avatarUrlFor(item.node.event.pubkey)}
                                   <img use:resourceImage={avatarUrlFor(item.node.event.pubkey)} alt="" loading="lazy" />
-                                {:else}
-                                  <span>{avatarFallbackFor(item.node.event.pubkey)}</span>
                                 {/if}
                               </span>
                               <span class="profile-chip-name" style={pubkeyColorStyle(item.node.event.pubkey)}>{displayNameFor(item.node.event.pubkey)}</span>
@@ -690,10 +687,9 @@
                       <div class="interaction-row zap-row">
                         <button type="button" class="profile-chip" title={zapper} onclick={() => openProfile(zapper)}>
                           <span class="profile-chip-avatar">
+                            <span>{avatarFallbackFor(zapper)}</span>
                             {#if avatarUrlFor(zapper)}
                               <img use:resourceImage={avatarUrlFor(zapper)} alt="" loading="lazy" />
-                            {:else}
-                              <span>{avatarFallbackFor(zapper)}</span>
                             {/if}
                           </span>
                           <span class="profile-chip-name" style={pubkeyColorStyle(zapper)}>{displayNameFor(zapper)}</span>
@@ -712,10 +708,9 @@
                       <div class="interaction-row compact">
                         <button type="button" class="profile-chip" title={repost.pubkey} onclick={() => openProfile(repost.pubkey)}>
                           <span class="profile-chip-avatar">
+                            <span>{avatarFallbackFor(repost.pubkey)}</span>
                             {#if avatarUrlFor(repost.pubkey)}
                               <img use:resourceImage={avatarUrlFor(repost.pubkey)} alt="" loading="lazy" />
-                            {:else}
-                              <span>{avatarFallbackFor(repost.pubkey)}</span>
                             {/if}
                           </span>
                           <span class="profile-chip-name" style={pubkeyColorStyle(repost.pubkey)}>{displayNameFor(repost.pubkey)}</span>
@@ -753,10 +748,9 @@
                           {#each group.actors as actor}
                             <button type="button" class="profile-chip" title={actor} onclick={() => openProfile(actor)}>
                               <span class="profile-chip-avatar">
+                                <span>{avatarFallbackFor(actor)}</span>
                                 {#if avatarUrlFor(actor)}
                                   <img use:resourceImage={avatarUrlFor(actor)} alt="" loading="lazy" />
-                                {:else}
-                                  <span>{avatarFallbackFor(actor)}</span>
                                 {/if}
                               </span>
                               <span class="profile-chip-name" style={pubkeyColorStyle(actor)}>{displayNameFor(actor)}</span>
@@ -773,10 +767,9 @@
                         <div class="quote-meta">
                           <button type="button" class="profile-chip" title={quoted.pubkey} onclick={() => openProfile(quoted.pubkey)}>
                             <span class="profile-chip-avatar">
+                              <span>{avatarFallbackFor(quoted.pubkey)}</span>
                               {#if avatarUrlFor(quoted.pubkey)}
                                 <img use:resourceImage={avatarUrlFor(quoted.pubkey)} alt="" loading="lazy" />
-                              {:else}
-                                <span>{avatarFallbackFor(quoted.pubkey)}</span>
                               {/if}
                             </span>
                             <span class="profile-chip-name" style={pubkeyColorStyle(quoted.pubkey)}>{displayNameFor(quoted.pubkey)}</span>
@@ -792,10 +785,9 @@
                         <div class="quote-meta">
                           <button type="button" class="profile-chip" title={quote.pubkey} onclick={() => openProfile(quote.pubkey)}>
                             <span class="profile-chip-avatar">
+                              <span>{avatarFallbackFor(quote.pubkey)}</span>
                               {#if avatarUrlFor(quote.pubkey)}
                                 <img use:resourceImage={avatarUrlFor(quote.pubkey)} alt="" loading="lazy" />
-                              {:else}
-                                <span>{avatarFallbackFor(quote.pubkey)}</span>
                               {/if}
                             </span>
                             <span class="profile-chip-name" style={pubkeyColorStyle(quote.pubkey)}>{displayNameFor(quote.pubkey)}</span>
@@ -1068,6 +1060,11 @@
     object-fit: cover;
   }
 
+  .author-avatar > span,
+  .author-avatar > img {
+    grid-area: 1 / 1;
+  }
+
   .author-copy {
     display: grid;
     min-width: 0;
@@ -1147,6 +1144,11 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .profile-chip-avatar > span,
+  .profile-chip-avatar > img {
+    grid-area: 1 / 1;
   }
 
   .profile-chip-name {
