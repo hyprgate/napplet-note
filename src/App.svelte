@@ -1,10 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import type { NostrEvent } from '@hyprgate/types';
-  import { inc as ipc, identity, link, type Subscription } from '@napplet/sdk';
+  import { identity, link, intent, type Subscription } from '@napplet/sdk';
   import {
-    NOTE_VIEWER_OPEN_TOPIC,
-    NOTE_VIEWER_READY_TOPIC,
     clientTagValue,
     formatMillisatsAsSats,
     isCanonicalHexPubkey,
@@ -21,7 +19,7 @@
   import { createNoteViewerShareReference } from './lib/note-links.js';
   import { createThreadEngagementStore } from './lib/thread-engagement-store.js';
   import { createEmojiSetStore, type EmojiOption } from './lib/emoji-sets.js';
-  import { noteTargetFromIncEvent, type IncEvent } from './note-intent-delivery.js';
+  import { noteTargetFromIntentDelivery, type IntentDelivery } from './note-intent-delivery.js';
   import { publishNoteViewerReaction } from './lib/note-viewer-actions.js';
   import { subscribeProfileMetadata, type ProfileContent } from './lib/profile-metadata.js';
   import RenderedNoteContent from './RenderedNoteContent.svelte';
@@ -128,8 +126,8 @@
     store.load(targetInput);
   }
 
-  function loadOpenPayload(event: IncEvent): void {
-    const nextTarget = noteTargetFromIncEvent(event);
+  function loadOpenPayload(event: IntentDelivery): void {
+    const nextTarget = noteTargetFromIntentDelivery(event);
     if (!nextTarget) return;
     manualEntryVisible = false;
     targetInput = nextTarget;
@@ -138,12 +136,31 @@
 
   async function copyShareReference(): Promise<void> {
     if (!shareReference) return;
+    const value = shareReference.value;
     if (copyResetTimer) clearTimeout(copyResetTimer);
     try {
-      await navigator.clipboard.writeText(shareReference.value);
+      await navigator.clipboard.writeText(value);
       copyState = 'copied';
     } catch {
-      copyState = 'failed';
+      // Clipboard permissions can reject inside an opaque app frame. Use the
+      // existing copy-command fallback without changing iframe permissions.
+      const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const input = document.createElement('textarea');
+      input.value = value;
+      input.setAttribute('readonly', '');
+      input.style.position = 'fixed';
+      input.style.left = '-9999px';
+      try {
+        document.body.append(input);
+        input.focus({ preventScroll: true });
+        input.select();
+        copyState = document.execCommand('copy') ? 'copied' : 'failed';
+      } catch {
+        copyState = 'failed';
+      } finally {
+        input.remove();
+        if (focused?.isConnected) focused.focus({ preventScroll: true });
+      }
     }
     copyResetTimer = setTimeout(() => {
       copyState = 'idle';
@@ -212,7 +229,7 @@
   }
 
   function openProfile(pubkey: string): void {
-    ipc.emit('profile:open', [], JSON.stringify({ pubkey }));
+    void intent.invoke('napplet:profile/open', { payload: { pubkey } });
   }
 
   function openNoteReference(reference: string): void {
@@ -368,8 +385,6 @@
   });
 
   onMount(() => {
-    const subNoteOpen = ipc.on(NOTE_VIEWER_OPEN_TOPIC, loadOpenPayload);
-    ipc.emit(NOTE_VIEWER_READY_TOPIC);
     const params = new URLSearchParams(window.location.search);
     const initialTarget = params.get('target');
     if (initialTarget) {
@@ -379,6 +394,9 @@
     } else {
       manualEntryVisible = true;
     }
+
+    // Register after URL initialization: buffered delivery must take precedence.
+    const subNoteOpen = intent.onDelivery(loadOpenPayload);
 
     // The reaction palette follows the logged-in user.
     const controller = new AbortController();
@@ -425,7 +443,7 @@
               placeholder="note1..., nevent1..., naddr1..., or 64-char id"
               spellcheck="false"
             />
-            <button class="load-button" type="submit" disabled={loading || !targetInput.trim()}>
+            <button class="load-button" type="button" onclick={loadTarget} disabled={loading || !targetInput.trim()}>
               {loading ? 'Loading' : 'Load'}
             </button>
           </div>

@@ -20,7 +20,7 @@ describe('createNoteViewerShareReference', () => {
       type: 'event',
       source: 'hex',
       id: EVENT.id,
-      relays: ['wss://relay.example', 'wss://relay.example'],
+      relays: [' wss://relay.example ', '', 'wss://relay.example', '  ', 'wss://second.example'],
     };
 
     const reference = createNoteViewerShareReference(EVENT, target)!;
@@ -33,7 +33,7 @@ describe('createNoteViewerShareReference', () => {
       id: EVENT.id,
       author: EVENT.pubkey,
       kind: EVENT.kind,
-      relays: ['wss://relay.example'],
+      relays: ['wss://relay.example', 'wss://second.example'],
     });
   });
 

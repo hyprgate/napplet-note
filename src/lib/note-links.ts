@@ -15,8 +15,8 @@ export interface NoteViewerShareReference {
   url: string;
 }
 
-function uniqueRelays(relays: string[] | undefined): string[] {
-  return [...new Set((relays ?? []).filter((relay) => relay.trim().length > 0))];
+export function uniqueRelays(relays: string[] | undefined): string[] {
+  return [...new Set((relays ?? []).map((relay) => relay.trim()).filter(Boolean))];
 }
 
 function firstDTag(event: NostrEvent): string | null {

@@ -1,6 +1,7 @@
 import type { NostrEvent, NostrFilter } from '@hyprgate/types';
 import { relay, type Subscription } from "@napplet/sdk";
 import * as nip19 from 'nostr-tools/nip19';
+import { uniqueRelays } from './note-links.js';
 
 export type NoteViewerTarget =
   | {
@@ -33,6 +34,7 @@ export interface NoteViewerStore {
 }
 
 const HEX_EVENT_ID = /^[0-9a-f]{64}$/i;
+export const NOTE_VIEWER_NO_RESULT_GRACE_MS = 5_000;
 
 function normalizeTargetInput(raw: string): string {
   const trimmed = raw.trim();
@@ -40,7 +42,7 @@ function normalizeTargetInput(raw: string): string {
 }
 
 function asRelays(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((relayUrl): relayUrl is string => typeof relayUrl === 'string') : [];
+  return uniqueRelays(Array.isArray(value) ? value.filter((relayUrl): relayUrl is string => typeof relayUrl === 'string') : []);
 }
 
 export function parseNoteViewerTarget(raw: string): NoteViewerTarget {
@@ -115,17 +117,24 @@ export function createNoteViewerStore(onUpdate?: () => void): NoteViewerStore {
   };
 
   let activeSub: Subscription | null = null;
+  let noResultTimer: ReturnType<typeof setTimeout> | null = null;
+  let loadGeneration = 0;
 
   function notify(): void {
     onUpdate?.();
   }
 
   function closeActiveSub(): void {
+    if (noResultTimer) {
+      clearTimeout(noResultTimer);
+      noResultTimer = null;
+    }
     activeSub?.close();
     activeSub = null;
   }
 
   function load(rawTarget: string): void {
+    const generation = ++loadGeneration;
     closeActiveSub();
 
     let target: NoteViewerTarget;
@@ -146,11 +155,19 @@ export function createNoteViewerStore(onUpdate?: () => void): NoteViewerStore {
     state.error = null;
     notify();
 
+    let settled = false;
     let closeAfterSubscribeReturns = false;
-    activeSub = relay.subscribe(
+    const subscription = relay.subscribe(
       filtersForTarget(target),
       (result) => {
+        if (generation !== loadGeneration || settled) return;
+        settled = true;
         const event = result.event as NostrEvent;
+        if (noResultTimer) {
+          clearTimeout(noResultTimer);
+          noResultTimer = null;
+        }
+        state.target = { ...target, relays: uniqueRelays([...target.relays, ...asRelays(result.sidecar?.relayHints)]) };
         state.event = event;
         state.loading = false;
         state.error = null;
@@ -162,25 +179,33 @@ export function createNoteViewerStore(onUpdate?: () => void): NoteViewerStore {
         notify();
       },
       () => {
-        if (!state.event) {
+        if (generation !== loadGeneration || settled) return;
+        if (state.event || noResultTimer) return;
+        const pendingTarget = state.target;
+        noResultTimer = setTimeout(() => {
+          noResultTimer = null;
+          if (generation !== loadGeneration || settled || state.target !== pendingTarget || state.event) return;
+          settled = true;
           state.loading = false;
           state.error = 'No matching event was returned by the shell relay.';
-          notify();
-        }
-        if (activeSub) {
           closeActiveSub();
-        } else {
-          closeAfterSubscribeReturns = true;
-        }
+          notify();
+        }, NOTE_VIEWER_NO_RESULT_GRACE_MS);
       },
     );
 
+    if (generation !== loadGeneration) {
+      subscription.close();
+      return;
+    }
+    activeSub = subscription;
     if (closeAfterSubscribeReturns) {
       closeActiveSub();
     }
   }
 
   function destroy(): void {
+    loadGeneration += 1;
     closeActiveSub();
   }
 
