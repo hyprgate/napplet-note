@@ -18,6 +18,7 @@ export interface ProfileContent {
 export type ProfileMetadataCallback = (pubkey: string, profile: ProfileContent) => void;
 
 const KIND_METADATA = 0;
+const PROFILE_INITIAL_SETTLE_MS = 2_000;
 const NOOP_SUBSCRIPTION: Subscription = { close: () => { /* no-op */ } };
 
 function getShell(): NappletShellHandle | null {
@@ -61,10 +62,22 @@ export function subscribeProfileMetadata(
   let subscription: Subscription | null = null;
   let closed = false;
   let closeWhenReady = false;
+  let finished = false;
+  let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function finish(): void {
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = null;
+    if (finished || closed) return;
+    finished = true;
+    onDone();
+  }
 
   function close(): void {
     if (closed) return;
     closed = true;
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = null;
     if (subscription) {
       subscription.close();
     } else {
@@ -91,15 +104,14 @@ export function subscribeProfileMetadata(
 
     const filters = authors.map((author) => ({ kinds: [KIND_METADATA], authors: [author], limit: 1 }));
     if (shell?.supports('outbox') ?? false) {
-      subscription = NOOP_SUBSCRIPTION;
-      try {
-        const result = await outbox.query(filters);
-        for (const item of result.events) handleEvent(item.event as NostrEvent);
-      } finally {
-        if (!closed) onDone();
-      }
+      // A one-shot query can return before NIP-65 discovery finds the author's
+      // relays, leaving a bare npub for good. Stay live so late metadata lands.
+      const stream = outbox.subscribe(filters);
+      stream.on('event', (result) => handleEvent(result.event as NostrEvent));
+      subscription = stream;
+      settleTimer = setTimeout(finish, PROFILE_INITIAL_SETTLE_MS);
     } else {
-      subscription = relay.subscribe(filters, (result) => handleEvent(result.event as NostrEvent), onDone);
+      subscription = relay.subscribe(filters, (result) => handleEvent(result.event as NostrEvent), finish);
     }
 
     if (closeWhenReady) subscription.close();

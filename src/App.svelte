@@ -22,6 +22,7 @@
   import { noteTargetFromIntentDelivery, type IntentDelivery } from './note-intent-delivery.js';
   import { publishNoteViewerReaction } from './lib/note-viewer-actions.js';
   import { subscribeProfileMetadata, type ProfileContent } from './lib/profile-metadata.js';
+  import { articleBlocks, articleMeta } from './lib/note-article.js';
   import RenderedNoteContent from './RenderedNoteContent.svelte';
   import ThreadNodeEngagement from './components/ThreadNodeEngagement.svelte';
   import {
@@ -30,6 +31,9 @@
     profileAvatarFallback,
     profileAvatarUrl,
     profileDisplayName,
+    npubTitle,
+    publishErrorMessage,
+    shortNpub,
     quoteTotal,
     reactionTotal,
     replyTotal,
@@ -92,7 +96,13 @@
   const shareReference = $derived(createNoteViewerShareReference(event, target));
   const contextHiddenCount = $derived(Math.max(0, thread.ancestors.length - thread.visibleAncestors.length));
   const contextRootEvent = $derived(thread.rootEvent ?? thread.ancestors[0] ?? null);
-  const showManualEntry = $derived(manualEntryVisible && !event);
+  // A failed lookup comes back to the entry panel, wherever the target came from,
+  // so the error is visible and the reference can be fixed or retried.
+  const showManualEntry = $derived(!event && (manualEntryVisible || (!!error && !loading)));
+  const article = $derived(event ? articleMeta(event) : null);
+  const articleContent = $derived(event && article ? articleBlocks(event.content, article.title) : []);
+  const authorHasName = $derived(event ? authorName !== shortNpub(event.pubkey) : false);
+  const replyError = $derived(thread.error ? publishErrorMessage(thread.error, thread.error) : null);
   const createdRelative = $derived(event ? timeago(event.created_at * 1000) : '');
   const clientName = $derived(event ? clientTagValue(event) : null);
   const authorName = $derived(event ? displayNameFor(event.pubkey) : 'Unknown');
@@ -183,6 +193,10 @@
     if (event.key === 'Enter') loadTarget();
   }
 
+  function focusOnMount(node: HTMLElement): void {
+    node.focus({ preventScroll: true });
+  }
+
   function openComposerFor(parentId: string): void {
     threadStore.openComposer(parentId);
   }
@@ -222,7 +236,7 @@
         if (completedReactionContent === group.content) completedReactionContent = null;
       }, 520);
     } catch (error) {
-      reactionPublishError = error instanceof Error ? error.message : 'Reaction failed';
+      reactionPublishError = publishErrorMessage(error, 'Reaction failed');
     } finally {
       sendingReaction = false;
     }
@@ -307,12 +321,14 @@
     loadingProfilePubkeys.clear();
   }
 
-  function ensureProfile(pubkey: string): void {
-    if (profileMap.has(pubkey) || loadingProfilePubkeys.has(pubkey)) return;
-    loadingProfilePubkeys.add(pubkey);
+  function ensureProfiles(pubkeys: string[]): void {
+    const missing = pubkeys.filter((pubkey) => !profileMap.has(pubkey) && !loadingProfilePubkeys.has(pubkey));
+    if (missing.length === 0) return;
+    for (const pubkey of missing) loadingProfilePubkeys.add(pubkey);
 
-    const subscription = subscribeProfileMetadata(
-      [pubkey],
+    // One stream per batch stays open, so late metadata still replaces an npub.
+    profileSubscriptions.add(subscribeProfileMetadata(
+      missing,
       (profilePubkey, nextProfile) => {
         const currentProfile = profileMap.get(profilePubkey);
         if (
@@ -325,17 +341,7 @@
         profileMap.set(profilePubkey, nextProfile);
         profileMapVersion++;
       },
-      () => {
-        loadingProfilePubkeys.delete(pubkey);
-        profileSubscriptions.delete(subscription);
-      },
-    );
-
-    profileSubscriptions.add(subscription);
-  }
-
-  function ensureProfiles(pubkeys: string[]): void {
-    for (const pubkey of pubkeys) ensureProfile(pubkey);
+    ));
   }
 
   function selectActivityTab(tab: ActivityTab): void {
@@ -428,20 +434,21 @@
 <div class="note-viewer" data-note-target={targetInput}>
   {#if showManualEntry}
     <main class="manual-entry">
-      <form class="manual-panel" onsubmit={(submitEvent) => { submitEvent.preventDefault(); loadTarget(); }}>
+      <div class="manual-panel">
         <div class="manual-heading">
-          <span class="manual-kicker">Note Reader</span>
-          <h1>Open a Nostr note</h1>
+          <h1>Read a note and its replies</h1>
+          <p>Notes you open from Feed, Profile or a link land here. You can also paste one in.</p>
         </div>
         <label class="target-control">
-          <span class="target-label">Event id or NIP-19</span>
+          <span class="target-label">Note link or ID</span>
           <div class="target-row">
             <input
               class="target-input"
               bind:value={targetInput}
               onkeydown={handleKeydown}
-              placeholder="note1..., nevent1..., naddr1..., or 64-char id"
+              placeholder="note1..., nevent1..., naddr1... or a 64-character ID"
               spellcheck="false"
+              aria-invalid={!!error}
             />
             <button class="load-button" type="button" onclick={loadTarget} disabled={loading || !targetInput.trim()}>
               {loading ? 'Loading' : 'Load'}
@@ -449,10 +456,13 @@
           </div>
         </label>
 
-        {#if error}
-          <p class="status-text danger">{error}</p>
+        {#if loading}
+          <p class="status-text" role="status">Looking for this note on your relays...</p>
         {/if}
-      </form>
+        {#if error}
+          <p class="status-text danger" role="alert">{error}</p>
+        {/if}
+      </div>
     </main>
   {:else}
     <main class="reader-scroll">
@@ -465,7 +475,7 @@
                   <span>{thread.visibleAncestors.length > 0 ? 'In reply to' : 'Thread context'}</span>
                   <div class="thread-context-actions">
                     {#if contextRootEvent && contextRootEvent.id !== event.id}
-                      <button class="small-action" type="button" onclick={openRootContext}>Jump root</button>
+                      <button class="small-action" type="button" onclick={openRootContext}>Start of thread</button>
                     {/if}
                     {#if thread.ancestors.length > 1}
                       <button class="small-action" type="button" onclick={() => threadStore.toggleContextExpanded()}>
@@ -476,7 +486,7 @@
                 </div>
 
                 {#if thread.contextLoading}
-                  <p class="status-text">loading context...</p>
+                  <p class="status-text" role="status">Loading the thread...</p>
                 {/if}
                 {#if thread.contextError}
                   <p class="status-text danger">{thread.contextError}</p>
@@ -487,7 +497,7 @@
                     <article class="thread-context-node">
                       <div class="thread-meta">
                         <div class="thread-meta-main">
-                          <button type="button" class="profile-chip" title={ancestor.pubkey} onclick={() => openProfile(ancestor.pubkey)}>
+                          <button type="button" class="profile-chip" title={npubTitle(ancestor.pubkey)} onclick={() => openProfile(ancestor.pubkey)}>
                             <span class="profile-chip-avatar">
                               <span>{avatarFallbackFor(ancestor.pubkey)}</span>
                               {#if avatarUrlFor(ancestor.pubkey)}
@@ -496,7 +506,7 @@
                             </span>
                             <span class="profile-chip-name" style={pubkeyColorStyle(ancestor.pubkey)}>{displayNameFor(ancestor.pubkey)}</span>
                           </button>
-                          <span>{formatTimestamp(ancestor.created_at)}</span>
+                          <span title={formatTimestamp(ancestor.created_at)}>{timeago(ancestor.created_at * 1000)}</span>
                         </div>
                         <button class="small-action" type="button" onclick={() => openNoteReference(ancestor.id)}>Open</button>
                       </div>
@@ -535,13 +545,14 @@
                   <button type="button" class="author-name" style={pubkeyColorStyle(event.pubkey)} onclick={() => openProfile(event.pubkey)}>
                     {authorName}
                   </button>
-                  <code title={event.pubkey} style={pubkeyColorStyle(event.pubkey)}>{shortId(event.pubkey)}</code>
+                  {#if authorHasName}
+                    <code title={npubTitle(event.pubkey)}>{shortNpub(event.pubkey)}</code>
+                  {/if}
                 </div>
               </div>
 
               <div class="note-context">
-                <span>{createdRelative}</span>
-                <span>{formatTimestamp(event.created_at)}</span>
+                <span title={formatTimestamp(event.created_at)}>{createdRelative}</span>
                 {#if clientName}
                   <span class="note-client" title="Published with {clientName}">via {clientName}</span>
                 {/if}
@@ -550,21 +561,44 @@
               {#if shareReference}
                 <div class="note-actions">
                   <button class="action-button primary" type="button" onclick={() => void copyShareReference()}>
-                    {copyState === 'copied' ? 'copied' : copyState === 'failed' ? 'failed' : shareReference.type}
+                    {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? "Couldn't copy" : `Copy ${shareReference.type}`}
                   </button>
-                  <a class="action-button" href={shareReference.url} target="_blank" rel="noreferrer" onclick={(e) => void openShareLink(e, shareReference.url)}>open</a>
+                  <a class="action-button" href={shareReference.url} target="_blank" rel="noreferrer" onclick={(e) => void openShareLink(e, shareReference.url)}>Open on the web</a>
                 </div>
               {/if}
             </header>
 
-            <section class="note-content" aria-label="Note content">
-              <RenderedNoteContent
-                content={event.content || '[empty content]'}
-                emojiTags={event.tags}
-                profileLabel={displayNameFor}
-                {openProfile}
-                {openNoteReference}
-              />
+            <section class="note-content" class:article={!!article} aria-label="Note content">
+              {#if article}
+                {#if article.image}
+                  <img class="article-cover" use:resourceImage={article.image} alt="" />
+                {/if}
+                {#if article.title}<h1 class="article-title">{article.title}</h1>{/if}
+                {#if article.summary}<p class="article-summary">{article.summary}</p>{/if}
+                {#each articleContent as block, index (index)}
+                  {#if block.type === 'heading'}
+                    <svelte:element this={`h${block.level}`} class="article-heading">{block.text}</svelte:element>
+                  {:else}
+                    <div class="article-paragraph">
+                      <RenderedNoteContent
+                        content={block.text}
+                        emojiTags={event.tags}
+                        profileLabel={displayNameFor}
+                        {openProfile}
+                        {openNoteReference}
+                      />
+                    </div>
+                  {/if}
+                {/each}
+              {:else}
+                <RenderedNoteContent
+                  content={event.content || '[empty content]'}
+                  emojiTags={event.tags}
+                  profileLabel={displayNameFor}
+                  {openProfile}
+                  {openNoteReference}
+                />
+              {/if}
             </section>
 
             <div class="root-engagement">
@@ -602,9 +636,9 @@
               <div class="activity-panel" id={`activity-panel-${activeActivityTab}`} role="tabpanel">
                 {#if activeActivityTab === 'replies'}
                   <div class="reply-toolbar">
-                    <button class="small-action primary" onclick={() => openComposerFor(event!.id)}>Reply</button>
+                    <button class="small-action primary reply-cta" onclick={() => openComposerFor(event!.id)}>Reply</button>
                     {#if thread.loading}
-                      <span class="status-text">loading thread...</span>
+                      <span class="status-text" role="status">Loading replies...</span>
                     {/if}
                   </div>
 
@@ -612,9 +646,11 @@
                     <div class="composer-box">
                       <textarea
                         class="composer-input"
+                        use:focusOnMount
+                        aria-label="Write your reply"
                         value={thread.draft}
                         oninput={(inputEvent) => threadStore.setDraft((inputEvent.currentTarget as HTMLTextAreaElement).value)}
-                        placeholder="Write a response"
+                        placeholder="Write your reply"
                       ></textarea>
                       <div class="composer-actions">
                         <button class="small-action" onclick={() => threadStore.closeComposer()}>Cancel</button>
@@ -625,8 +661,12 @@
                     </div>
                   {/if}
 
-                  {#if thread.error}
-                    <p class="status-text danger">{thread.error}</p>
+                  {#if replyError}
+                    <p class="status-text danger" role="alert">{replyError}</p>
+                  {/if}
+
+                  {#if thread.visible.length === 0 && !thread.loading}
+                    <p class="status-text">No replies yet. You could be the first.</p>
                   {/if}
 
                   <div class="thread-list">
@@ -636,10 +676,11 @@
                         style={`margin-left: ${Math.min(item.depth - 1, 4) * 1.05}rem`}
                         onpointerenter={() => (hoveredNodeId = item.node.event.id)}
                         onpointerleave={() => { if (hoveredNodeId === item.node.event.id) hoveredNodeId = null; }}
+                        onfocusin={() => (hoveredNodeId = item.node.event.id)}
                       >
                         <div class="thread-meta">
                           <div class="thread-meta-main">
-                            <button type="button" class="profile-chip" title={item.node.event.pubkey} onclick={() => openProfile(item.node.event.pubkey)}>
+                            <button type="button" class="profile-chip" title={npubTitle(item.node.event.pubkey)} onclick={() => openProfile(item.node.event.pubkey)}>
                               <span class="profile-chip-avatar">
                                 <span>{avatarFallbackFor(item.node.event.pubkey)}</span>
                                 {#if avatarUrlFor(item.node.event.pubkey)}
@@ -648,7 +689,7 @@
                               </span>
                               <span class="profile-chip-name" style={pubkeyColorStyle(item.node.event.pubkey)}>{displayNameFor(item.node.event.pubkey)}</span>
                             </button>
-                            <span>{formatTimestamp(item.node.event.created_at)}</span>
+                            <span title={formatTimestamp(item.node.event.created_at)}>{timeago(item.node.event.created_at * 1000)}</span>
                           </div>
                           <button class="small-action" onclick={() => openComposerFor(item.node.id)}>Reply</button>
                         </div>
@@ -683,9 +724,11 @@
                           <div class="composer-box">
                             <textarea
                               class="composer-input"
+                              use:focusOnMount
+                              aria-label="Write your reply"
                               value={thread.draft}
                               oninput={(inputEvent) => threadStore.setDraft((inputEvent.currentTarget as HTMLTextAreaElement).value)}
-                              placeholder="Write a response"
+                              placeholder="Write your reply"
                             ></textarea>
                             <div class="composer-actions">
                               <button class="small-action" onclick={() => threadStore.closeComposer()}>Cancel</button>
@@ -703,7 +746,7 @@
                     {#each interactions.zaps as zap (zap.id)}
                       {@const zapper = zap.senderPubkey ?? zap.providerPubkey}
                       <div class="interaction-row zap-row">
-                        <button type="button" class="profile-chip" title={zapper} onclick={() => openProfile(zapper)}>
+                        <button type="button" class="profile-chip" title={npubTitle(zapper)} onclick={() => openProfile(zapper)}>
                           <span class="profile-chip-avatar">
                             <span>{avatarFallbackFor(zapper)}</span>
                             {#if avatarUrlFor(zapper)}
@@ -724,7 +767,7 @@
                   <div class="interaction-list">
                     {#each interactions.reposts as repost (repost.id)}
                       <div class="interaction-row compact">
-                        <button type="button" class="profile-chip" title={repost.pubkey} onclick={() => openProfile(repost.pubkey)}>
+                        <button type="button" class="profile-chip" title={npubTitle(repost.pubkey)} onclick={() => openProfile(repost.pubkey)}>
                           <span class="profile-chip-avatar">
                             <span>{avatarFallbackFor(repost.pubkey)}</span>
                             {#if avatarUrlFor(repost.pubkey)}
@@ -749,7 +792,9 @@
                           class:hold-active={holdingReactionContent === group.content}
                           class:send-complete={completedReactionContent === group.content}
                           title={`Hold to send ${group.content || '+'}`}
+                          aria-label={`Send ${group.content || '+'} too`}
                           disabled={sendingReaction}
+                          onclick={(click) => { if (click.detail === 0) void sendExistingReaction(group); }}
                           onpointerdown={() => startReactionHold(group)}
                           onpointerup={cancelReactionHold}
                           onpointerleave={cancelReactionHold}
@@ -764,7 +809,7 @@
                         <span>{pluralLabel(group.events.length, 'reaction')}</span>
                         <span class="profile-chip-list">
                           {#each group.actors as actor}
-                            <button type="button" class="profile-chip" title={actor} onclick={() => openProfile(actor)}>
+                            <button type="button" class="profile-chip" title={npubTitle(actor)} onclick={() => openProfile(actor)}>
                               <span class="profile-chip-avatar">
                                 <span>{avatarFallbackFor(actor)}</span>
                                 {#if avatarUrlFor(actor)}
@@ -783,7 +828,7 @@
                     {#each interactions.quotedEvents as quoted (quoted.id)}
                       <article class="quote-row">
                         <div class="quote-meta">
-                          <button type="button" class="profile-chip" title={quoted.pubkey} onclick={() => openProfile(quoted.pubkey)}>
+                          <button type="button" class="profile-chip" title={npubTitle(quoted.pubkey)} onclick={() => openProfile(quoted.pubkey)}>
                             <span class="profile-chip-avatar">
                               <span>{avatarFallbackFor(quoted.pubkey)}</span>
                               {#if avatarUrlFor(quoted.pubkey)}
@@ -801,7 +846,7 @@
                     {#each interactions.quoteEvents as quote (quote.id)}
                       <article class="quote-row">
                         <div class="quote-meta">
-                          <button type="button" class="profile-chip" title={quote.pubkey} onclick={() => openProfile(quote.pubkey)}>
+                          <button type="button" class="profile-chip" title={npubTitle(quote.pubkey)} onclick={() => openProfile(quote.pubkey)}>
                             <span class="profile-chip-avatar">
                               <span>{avatarFallbackFor(quote.pubkey)}</span>
                               {#if avatarUrlFor(quote.pubkey)}
@@ -853,9 +898,9 @@
 
         </article>
       {:else if loading}
-        <div class="empty-state">loading event...</div>
+        <div class="empty-state" role="status">Loading note...</div>
       {:else}
-        <div class="empty-state">No event loaded.</div>
+        <div class="empty-state">No note open.</div>
       {/if}
     </main>
   {/if}
@@ -897,12 +942,9 @@
 
   .manual-panel {
     display: grid;
-    width: min(520px, 100%);
-    gap: 14px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    background: var(--surface);
-    padding: 14px;
+    width: min(620px, 100%);
+    gap: 18px;
+    padding: 8px;
   }
 
   .manual-heading {
@@ -918,10 +960,67 @@
     font-size: 11px;
   }
 
+  .manual-heading p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .note-viewer :global(button:focus-visible),
+  .note-viewer :global(a:focus-visible),
+  .note-viewer :global(summary:focus-visible) {
+    outline: 2px solid var(--hg-accent-focus, var(--accent));
+    outline-offset: 1px;
+  }
+
+  .note-article .small-action.primary.reply-cta {
+    min-height: 26px;
+    padding: 0 12px;
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  .article-cover {
+    display: block;
+    width: 100%;
+    max-height: 18rem;
+    margin-bottom: 14px;
+    border-radius: 6px;
+    object-fit: cover;
+  }
+
+  .article-title {
+    margin: 0 0 6px;
+    color: var(--text);
+    font-family: var(--hg-font-title, inherit);
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .article-summary {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 15px;
+  }
+
+  .note-content :global(.article-heading) {
+    margin: 22px 0 8px;
+    color: var(--text);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .article-paragraph + .article-paragraph {
+    margin-top: 14px;
+  }
+
   .manual-heading h1 {
     margin: 0;
     color: var(--text);
-    font-size: 15px;
+    font-size: 18px;
     font-weight: 600;
     letter-spacing: 0;
     line-height: 1.35;
@@ -1027,7 +1126,7 @@
     grid-template-columns: minmax(0, 1fr);
     gap: 12px;
     align-items: start;
-    max-width: 980px;
+    max-width: 720px;
     margin: 0 auto;
   }
 

@@ -73,7 +73,8 @@ const ENGAGEMENT_FILTERS = (ids: string[]) => [
 
 interface ThreadEngagementContext {
   state: ThreadEngagementState;
-  sub: Subscription | null;
+  subs: Subscription[];
+  subscribedIds: Set<string>;
   targetsKey: string;
   loadedIds: Set<string>;
   // category -> targetId -> seen event ids (dedupe)
@@ -134,9 +135,10 @@ function applyEvent(ctx: ThreadEngagementContext, event: NostrEvent): void {
   if (changed) ctx.notify();
 }
 
-function closeSub(ctx: ThreadEngagementContext): void {
-  ctx.sub?.close();
-  ctx.sub = null;
+function closeSubs(ctx: ThreadEngagementContext): void {
+  for (const sub of ctx.subs) sub.close();
+  ctx.subs = [];
+  ctx.subscribedIds = new Set();
 }
 
 function setTargets(ctx: ThreadEngagementContext, ids: string[]): void {
@@ -145,20 +147,25 @@ function setTargets(ctx: ThreadEngagementContext, ids: string[]): void {
   if (key === ctx.targetsKey) return;
   ctx.targetsKey = key;
   ctx.loadedIds = new Set(unique);
-  closeSub(ctx);
-  if (unique.length === 0) return;
+  // A thread's targets grow as replies load. Closing the running subscription each
+  // time dropped counts that hadn't arrived yet, so only new ids get a new one.
+  if ([...ctx.subscribedIds].some((id) => !ctx.loadedIds.has(id))) closeSubs(ctx);
+  const fresh = unique.filter((id) => !ctx.subscribedIds.has(id));
+  if (fresh.length === 0) return;
+  for (const id of fresh) ctx.subscribedIds.add(id);
 
-  ctx.sub = relay.subscribe(
-    ENGAGEMENT_FILTERS(unique),
+  ctx.subs.push(relay.subscribe(
+    ENGAGEMENT_FILTERS(fresh),
     (result) => applyEvent(ctx, result.event as NostrEvent),
     () => {},
-  );
+  ));
 }
 
 export function createThreadEngagementStore(onUpdate?: () => void): ThreadEngagementStore {
   const ctx: ThreadEngagementContext = {
     state: { engagement: new Map(), version: 0 },
-    sub: null,
+    subs: [],
+    subscribedIds: new Set<string>(),
     targetsKey: '',
     loadedIds: new Set<string>(),
     seen: new Map<string, Map<string, Set<string>>>(),
@@ -173,6 +180,6 @@ export function createThreadEngagementStore(onUpdate?: () => void): ThreadEngage
     state: ctx.state,
     setTargets: (ids) => setTargets(ctx, ids),
     countsFor: (id) => ctx.state.engagement.get(id) ?? emptyCounts(),
-    destroy: () => closeSub(ctx),
+    destroy: () => closeSubs(ctx),
   };
 }

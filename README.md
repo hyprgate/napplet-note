@@ -43,6 +43,14 @@ pnpm --filter @hyprgate/napp-note-viewer build
 `e2e/note-relay-provenance.spec.ts` verifies real local relay delivery, copied
 pointer fields, and the actual OS clipboard in the deterministic browser harness.
 
+## What it shows
+
+Notes you open from another app land here, and the empty state lets you paste a
+note link or ID. A lookup that fails returns to that panel with the reason, so you
+can correct it or try again. Long-form posts (kind 30023) show their title, summary
+and cover, with headings and paragraphs split out. That isn't a full Markdown
+renderer: lists, emphasis and tables stay as written.
+
 ## Intent delivery
 
 The app receives `napplet:note/open` through the host-injected

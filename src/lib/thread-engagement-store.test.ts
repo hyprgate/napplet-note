@@ -76,4 +76,25 @@ describe('thread engagement store', () => {
       imageUrl: 'https://emoji.example/blobcat.png',
     });
   });
+
+  it('keeps earlier subscriptions running while a thread grows', () => {
+    const closes: Array<ReturnType<typeof vi.fn>> = [];
+    vi.mocked(relay.subscribe).mockImplementation(() => {
+      const close = vi.fn();
+      closes.push(close);
+      return { close };
+    });
+    const store = createThreadEngagementStore();
+    store.setTargets(['root']);
+    store.setTargets(['root', 'reply1']);
+
+    expect(vi.mocked(relay.subscribe)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(relay.subscribe).mock.calls[1]?.[0]).toContainEqual({ kinds: [7], '#e': ['reply1'] });
+    expect(closes[0]).not.toHaveBeenCalled();
+
+    // Opening a different note replaces them.
+    store.setTargets(['other']);
+    expect(closes[0]).toHaveBeenCalled();
+    expect(closes[1]).toHaveBeenCalled();
+  });
 });

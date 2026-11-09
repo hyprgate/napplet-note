@@ -35,6 +35,7 @@ export interface NoteViewerStore {
 
 const HEX_EVENT_ID = /^[0-9a-f]{64}$/i;
 export const NOTE_VIEWER_NO_RESULT_GRACE_MS = 5_000;
+export const NOTE_NOT_FOUND_MESSAGE = "Couldn't find this note. It may have been deleted, or it's on a relay we didn't ask.";
 
 function normalizeTargetInput(raw: string): string {
   const trimmed = raw.trim();
@@ -187,7 +188,7 @@ export function createNoteViewerStore(onUpdate?: () => void): NoteViewerStore {
           if (generation !== loadGeneration || settled || state.target !== pendingTarget || state.event) return;
           settled = true;
           state.loading = false;
-          state.error = 'No matching event was returned by the shell relay.';
+          state.error = NOTE_NOT_FOUND_MESSAGE;
           closeActiveSub();
           notify();
         }, NOTE_VIEWER_NO_RESULT_GRACE_MS);

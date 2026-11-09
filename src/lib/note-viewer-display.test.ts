@@ -5,6 +5,9 @@ import {
   profileAvatarFallback,
   profileAvatarUrl,
   profileDisplayName,
+  publishErrorMessage,
+  shortNpub,
+  tightenImageSpacing,
   quoteTotal,
   reactionPreview,
   reactionTotal,
@@ -90,5 +93,23 @@ describe('note-viewer-display', () => {
 
     expect(replyTotal(graph, 1)).toBe(3);
     expect(replyTotal(null, 2)).toBe(2);
+  });
+
+  it('falls back to an npub for people without a name', () => {
+    const hex = 'c'.repeat(64);
+    expect(profileDisplayName(hex, null)).toBe(shortNpub(hex));
+    expect(shortNpub(hex)).toMatch(/^npub1/);
+    expect(shortNpub(hex)).not.toContain('cccc');
+  });
+
+  it('drops only the blank lines around a standalone image URL', () => {
+    expect(tightenImageSpacing('Look.\n\nhttps://a.example/x.png')).toBe('Look.\nhttps://a.example/x.png');
+    expect(tightenImageSpacing('One.\n\nTwo.')).toBe('One.\n\nTwo.');
+  });
+
+  it('explains read-only sessions and keeps other reasons', () => {
+    expect(publishErrorMessage(new Error('Cant sign events with readonly'), 'x')).toContain('read-only');
+    expect(publishErrorMessage(new Error('relay said no'), 'x')).toBe('relay said no');
+    expect(publishErrorMessage(undefined, 'Reaction failed')).toBe('Reaction failed');
   });
 });

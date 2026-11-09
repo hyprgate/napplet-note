@@ -395,6 +395,7 @@ export function createReplyThreadStore(onUpdate?: () => void): ReplyThreadStore 
     closeComposer(): void {
       ctx.state.activeComposerId = null;
       ctx.state.draft = '';
+      ctx.state.error = null;
       ctx.notify();
     },
     setDraft(value: string): void {

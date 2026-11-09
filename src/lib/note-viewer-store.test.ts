@@ -15,6 +15,7 @@ import {
   filtersForTarget,
   NOTE_VIEWER_NO_RESULT_GRACE_MS,
   parseNoteViewerTarget,
+  NOTE_NOT_FOUND_MESSAGE,
 } from './note-viewer-store.js';
 
 const mockSubscribe = vi.mocked(relay.subscribe);
@@ -240,14 +241,14 @@ describe('createNoteViewerStore', () => {
 
       vi.advanceTimersByTime(1);
       expect(store.state.loading).toBe(false);
-      expect(store.state.error).toBe('No matching event was returned by the shell relay.');
+      expect(store.state.error).toBe(NOTE_NOT_FOUND_MESSAGE);
       expect(close).toHaveBeenCalledTimes(1);
 
       emitEvent?.({ event });
       emitEose?.();
       vi.advanceTimersByTime(NOTE_VIEWER_NO_RESULT_GRACE_MS);
       expect(store.state.event).toBeNull();
-      expect(store.state.error).toBe('No matching event was returned by the shell relay.');
+      expect(store.state.error).toBe(NOTE_NOT_FOUND_MESSAGE);
       expect(close).toHaveBeenCalledTimes(1);
 
       store.destroy();

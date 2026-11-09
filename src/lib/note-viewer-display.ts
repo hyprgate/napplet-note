@@ -1,5 +1,6 @@
 import type { InteractionDetailState, ReactionGroup } from './interaction-detail-store.js';
 import type { ParsedZapReceipt } from '@hyprgate/utils';
+import * as nip19 from 'nostr-tools/nip19';
 import type { ThreadGraph } from './thread-graph.js';
 
 export interface ProfileDisplayContent {
@@ -15,6 +16,42 @@ export function shortId(value: string): string {
   return `${value.slice(0, 10)}...${value.slice(-8)}`;
 }
 
+/** How a person reads when there's no name: an npub, never hex. */
+export function shortNpub(pubkey: string): string {
+  if (!/^[0-9a-f]{64}$/.test(pubkey)) return shortId(pubkey);
+  const npub = nip19.npubEncode(pubkey);
+  return `${npub.slice(0, 12)}...${npub.slice(-6)}`;
+}
+
+export function npubTitle(pubkey: string): string {
+  return /^[0-9a-f]{64}$/.test(pubkey) ? nip19.npubEncode(pubkey) : pubkey;
+}
+
+const STANDALONE_IMAGE_LINE = /^\s*https?:\/\/\S+\.(?:png|jpe?g|gif|webp|avif)(?:[?#]\S*)?\s*$/i;
+
+/** Images render as blocks, so blank lines around an image URL only add a gap. */
+export function tightenImageSpacing(content: string): string {
+  const lines = content.split(/\r\n|\r|\n/);
+  const isBlank = (value: string | undefined) => value !== undefined && value.trim() === '';
+  return lines.filter((line, index) => {
+    if (line.trim() !== '') return true;
+    let before = index - 1;
+    while (isBlank(lines[before])) before -= 1;
+    let after = index + 1;
+    while (isBlank(lines[after])) after += 1;
+    return !STANDALONE_IMAGE_LINE.test(lines[before] ?? '') && !STANDALONE_IMAGE_LINE.test(lines[after] ?? '');
+  }).join('\n').trimEnd();
+}
+
+/** Plain-language failure for reactions and replies. */
+export function publishErrorMessage(err: unknown, fallback: string): string {
+  const reason = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  if (/read.?only/i.test(reason)) {
+    return "This session is read-only, so it can't sign. Sign in with a key or a signer to publish.";
+  }
+  return reason || fallback;
+}
+
 export function profileDisplayName(pubkey: string, profile: ProfileDisplayContent | null | undefined): string {
   const displayName = profile?.display_name?.trim();
   if (displayName) return displayName;
@@ -22,7 +59,7 @@ export function profileDisplayName(pubkey: string, profile: ProfileDisplayConten
   if (camelDisplayName) return camelDisplayName;
   const name = profile?.name?.trim();
   if (name) return name;
-  return shortId(pubkey);
+  return shortNpub(pubkey);
 }
 
 export function profileAvatarUrl(profile: ProfileDisplayContent | null | undefined): string | null {

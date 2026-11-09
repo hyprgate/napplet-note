@@ -3,6 +3,7 @@
   // note-viewer's callback-based navigation (root note and thread replies).
   import { link } from '@napplet/sdk';
   import NoteContent from '@hyprgate/napplet-ui/NoteContent.svelte';
+  import { tightenImageSpacing } from './lib/note-viewer-display.js';
 
   interface Props {
     content: string;
@@ -23,7 +24,7 @@
 </script>
 
 <NoteContent
-  {content}
+  content={tightenImageSpacing(content)}
   {emojiTags}
   {profileLabel}
   onProfileClick={openProfile}

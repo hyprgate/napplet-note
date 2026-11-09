@@ -65,9 +65,9 @@ describe('Note Reader visible copy action', () => {
   }
 
   it.each([
-    [true, 'copied'],
-    [false, 'failed'],
-    ['throw', 'failed'],
+    [true, 'Copied'],
+    [false, "Couldn't copy"],
+    ['throw', "Couldn't copy"],
   ] as const)('falls back after Clipboard API rejection and reports execCommand=%s honestly', async (result, label) => {
     const writeText = vi.fn().mockRejectedValue(new DOMException('Clipboard is blocked by permissions policy', 'NotAllowedError'));
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
@@ -103,7 +103,7 @@ describe('Note Reader visible copy action', () => {
     const button = await loadedCopyButton();
     button.focus();
     button.click();
-    await vi.waitFor(() => expect(button.textContent).toBe('copied'));
+    await vi.waitFor(() => expect(button.textContent).toBe('Copied'));
 
     expect(nip19.decode(writeText.mock.calls[0]![0])).toMatchObject({
       type: 'nevent', data: { id: EVENT_ID, relays: ['wss://observed.example'] },
@@ -127,14 +127,8 @@ async function renderInput(value: string): Promise<HTMLInputElement> {
 describe('Note Reader manual target entry', () => {
   it.each([EVENT_ID, nip19.noteEncode(EVENT_ID)])('loads %s from the visible button without native form submission', async (input) => {
     await renderInput(input);
-    const form = document.querySelector('form')!;
-    const blockedSubmit = vi.fn((event: SubmitEvent) => {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    });
-    // Model the opaque iframe's blocked native submission before Svelte's
-    // delegated submit handler. The click must call the app's loader directly.
-    form.addEventListener('submit', blockedSubmit, { capture: true });
+    // Submit never fires under sandbox="allow-scripts", so nothing may rely on a form.
+    expect(document.querySelector('form')).toBeNull();
     const button = document.querySelector<HTMLButtonElement>('.load-button')!;
     expect(button.textContent).toBe('Load');
     button.click();
@@ -143,7 +137,6 @@ describe('Note Reader manual target entry', () => {
     expect(relay.subscribe).toHaveBeenCalledExactlyOnceWith(
       [{ ids: [EVENT_ID], limit: 1 }], expect.any(Function), expect.any(Function),
     );
-    expect(blockedSubmit).not.toHaveBeenCalled();
     expect(button.disabled).toBe(true);
     expect(button.textContent).toBe('Loading');
     button.click();
